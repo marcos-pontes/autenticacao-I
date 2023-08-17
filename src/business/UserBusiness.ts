@@ -1,3 +1,4 @@
+import { UserDB } from './../models/User';
 import { UserDatabase } from "../database/UserDatabase"
 import { GetUsersInputDTO, GetUsersOutputDTO } from "../dtos/getUsers.dto"
 import { LoginInputDTO, LoginOutputDTO } from "../dtos/login.dto"
@@ -5,10 +6,14 @@ import { SignupInputDTO, SignupOutputDTO } from "../dtos/signup.dto"
 import { BadRequestError } from "../errors/BadRequestError"
 import { NotFoundError } from "../errors/NotFoundError"
 import { USER_ROLES, User } from "../models/User"
+import { IdGenerator } from "../service/IdGenerator"
+import { TokenManager } from "../service/tokenManager"
 
 export class UserBusiness {
   constructor(
-    private userDatabase: UserDatabase
+    private userDatabase: UserDatabase,
+    private idGenerator : IdGenerator,
+    private tokenManager: TokenManager
   ) { }
 
   public getUsers = async (
@@ -39,13 +44,14 @@ export class UserBusiness {
   public signup = async (
     input: SignupInputDTO
   ): Promise<SignupOutputDTO> => {
-    const { id, name, email, password } = input
+    const {  name, email, password } = input
 
-    const userDBExists = await this.userDatabase.findUserById(id)
+    const userDBExists = await this.userDatabase.findUserByEmail(email)
 
     if (userDBExists) {
-      throw new BadRequestError("'id' já existe")
+      throw new BadRequestError("'email' já cadastrado")
     }
+    const id = this.idGenerator.generateId();
 
     const newUser = new User(
       id,
@@ -59,9 +65,17 @@ export class UserBusiness {
     const newUserDB = newUser.toDBModel()
     await this.userDatabase.insertUser(newUserDB)
 
+    const token = this.tokenManager.createToken(
+      {
+        id: newUser.getId(),
+        role:newUser.getRole(),
+        name:newUser.getName()
+      }
+    )
+
     const output: SignupOutputDTO = {
       message: "Cadastro realizado com sucesso",
-      token: "token"
+      token: token
     }
 
     return output
@@ -82,9 +96,17 @@ export class UserBusiness {
       throw new BadRequestError("'email' ou 'password' incorretos")
     }
 
+    const token = this.tokenManager.createToken(
+      {
+        id: userDB.id,
+        role: userDB.role,
+        name: userDB.name
+      }
+    )
+
     const output: LoginOutputDTO = {
       message: "Login realizado com sucesso",
-      token: "token"
+      token: token
     }
 
     return output
